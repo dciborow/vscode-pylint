@@ -356,6 +356,61 @@ for city, population in data:
             "'abcbc def bacabc'.strip('abcbc ')",
             "'abcbc def bacabc'.strip('abc ')",
         ),
+        (
+            "C0209:consider-using-f-string",
+            'mod_name = "flit_core.dummy.import%d" % _import_i',
+            'mod_name = f"flit_core.dummy.import{_import_i}"',
+        ),
+        (
+            "C0209:consider-using-f-string",
+            """
+if True:
+    raise NoDocstringError(
+        "Flit cannot package module without docstring, or empty docstring. "
+        "Please add a docstring to your module ({}).".format(target.file)
+    )""",
+            """f"Please add a docstring to your module ({target.file})."
+""",
+        ),
+        (
+            "C0209:consider-using-f-string",
+            """
+def parse_entry_point(ep):
+    if ":" not in ep:
+        raise ValueError("Invalid entry point (no ':'): %r" % ep)
+""",
+            """        raise ValueError(f"Invalid entry point (no ':'): {ep}")"
+""",
+        ),
+        (
+            "C0209:consider-using-f-string",
+            """
+def write_entry_points(d, fp):
+    for group_name in sorted(d):
+        fp.write("[{}]\n".format(group_name))
+""",
+            """        fp.write(f"[{group_name}]\n")
+""",
+        ),
+        (
+            "C0209:consider-using-f-string",
+            """
+for field in fields:
+    value = getattr(self, self._normalise_name(field))
+    fp.write("{}: {}\n".format(field, value))
+""",
+            """    fp.write(f"{field}: {value}\n")
+""",
+        ),
+        (
+            "C0209:consider-using-f-string",
+            """
+for clsfr in self.classifiers:
+    fp.write("Classifier: {}\n".format(clsfr))
+""",
+            """    fp.write(f"Classifier: {clsfr}\n")
+""",
+        ),
     ],
 )
 def test_edit_code_action(code, contents, new_text):
