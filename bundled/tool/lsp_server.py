@@ -258,16 +258,15 @@ QUICK_FIXES = QuickFixSolutions()
 )
 def code_action(params: lsp.CodeActionParams) -> List[lsp.CodeAction]:
     """LSP handler for textDocument/codeAction request."""
-    diagnostics = list(
+    diagnostics = [
         d for d in params.context.diagnostics if d.source == TOOL_DISPLAY
-    )
+    ]
 
     document = LSP_SERVER.workspace.get_document(params.text_document.uri)
 
     code_actions = []
     for diagnostic in diagnostics:
-        func = QUICK_FIXES.solutions(diagnostic.code)
-        if func:
+        if func := QUICK_FIXES.solutions(diagnostic.code):
             code_actions.extend(func(document, [diagnostic]))
     return code_actions
 
@@ -710,17 +709,8 @@ def _run_tool_on_document(
 
     argv += TOOL_ARGS + settings["args"] + extra_args
 
-    if use_stdin:
-        argv += ["--from-stdin", document.path]
-    else:
-        argv += [document.path]
-
-    env = None
-    if use_path or use_rpc:
-        # for path and rpc modes we need to set PYTHONPATH, for module or API mode
-        # we would have already set the extra paths in the initialize handler.
-        env = _get_updated_env(settings)
-
+    argv += ["--from-stdin", document.path] if use_stdin else [document.path]
+    env = _get_updated_env(settings) if use_path or use_rpc else None
     if use_path:
         # This mode is used when running executables.
         log_to_output(" ".join(argv))
@@ -800,12 +790,7 @@ def _run_tool(extra_args: Sequence[str], settings: Dict[str, Any]) -> utils.RunR
 
     argv += extra_args
 
-    env = None
-    if use_path or use_rpc:
-        # for path and rpc modes we need to set PYTHONPATH, for module or API mode
-        # we would have already set the extra paths in the initialize handler.
-        env = _get_updated_env(settings)
-
+    env = _get_updated_env(settings) if use_path or use_rpc else None
     if use_path:
         # This mode is used when running executables.
         log_to_output(" ".join(argv))
@@ -853,8 +838,7 @@ def _get_updated_env(settings: Dict[str, Any]) -> str:
     """Returns the updated environment variables."""
     extra_paths = settings.get("extraPaths", [])
     paths = os.environ.get("PYTHONPATH", "").split(os.pathsep) + extra_paths
-    python_paths = os.pathsep.join([p for p in paths if len(p) > 0])
-    if python_paths:
+    if python_paths := os.pathsep.join([p for p in paths if len(p) > 0]):
         return {"PYTHONPATH": python_paths}
     return None
 
