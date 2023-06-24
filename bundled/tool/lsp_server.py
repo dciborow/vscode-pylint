@@ -12,6 +12,8 @@ import sys
 import traceback
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
+from gpt_review._ask import _ask
+
 
 # **********************************************************
 # Update sys.path before importing any bundled libraries.
@@ -389,6 +391,55 @@ def fix_with_replacement(
                 document,
                 [
                     _get_replacement_edit(diagnostic, document.lines)
+                    for diagnostic in diagnostics
+                    if diagnostic.code in REPLACEMENTS
+                ],
+            ),
+        )
+    ]
+
+
+GPT_PROMPTS = {
+    "C0116:missing-function-docstring": [
+        {
+            "prompt": "Add a docstring to this function to fix the issue.",
+        }
+    ],
+}
+
+
+def _get_gpt_edit(diagnostic: lsp.Diagnostic, lines: List[str]) -> lsp.TextEdit:
+    new_line = lines[diagnostic.range.start.line]
+    prompt = GPT_PROMPTS[diagnostic.code]
+    question = f"{new_line}\n{prompt}"
+
+    response = _ask(question=question, max_tokens=1000)
+
+    return lsp.TextEdit(
+        lsp.Range(
+            start=lsp.Position(line=diagnostic.range.start.line, character=0),
+            end=lsp.Position(line=diagnostic.range.start.line + 1, character=0),
+        ),
+        response,
+    )
+
+
+@QUICK_FIXES.quick_fix(
+    codes=list(GPT_PROMPTS.keys()),
+)
+def fix_with_gpt(
+    document: workspace.Document, diagnostics: List[lsp.Diagnostic]
+) -> List[lsp.CodeAction]:
+    """Provides quick fixes which basic string replacements."""
+    return [
+        lsp.CodeAction(
+            title=f"{TOOL_DISPLAY}: Run autofix code action",
+            kind=lsp.CodeActionKind.QuickFix,
+            diagnostics=diagnostics,
+            edit=_create_workspace_edits(
+                document,
+                [
+                    _get_gpt_edit(diagnostic, document.lines)
                     for diagnostic in diagnostics
                     if diagnostic.code in REPLACEMENTS
                 ],

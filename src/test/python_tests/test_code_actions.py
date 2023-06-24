@@ -339,3 +339,120 @@ def test_edit_code_action(code, contents, new_text):
             actual_code_actions[0]["edit"]["documentChanges"],
             is_(expected[0]["edit"]["documentChanges"]),
         )
+
+
+@pytest.mark.parametrize(
+    ("code", "contents", "new_text"),
+    [
+        (
+            "C0116:missing-function-docstring",
+            """
+def get_patches(self, pull_request_event) -> Iterable[List[str]]:
+    pull_request = pull_request_event["pullRequest"]
+
+    git_changes = self.get_changed_blobs(pull_request)
+    return [
+        self._get_change(git_change, pull_request["lastMergeSourceCommit"]["commitId"])
+        for git_change in git_changes
+    ]
+""",
+            """
+def get_patches(self, pull_request_event) -> Iterable[List[str]]:
+    \"""
+    Get the patches for a given pull request event.
+
+    Args:
+        pull_request_event (Any): The pull request event to retrieve patches for.
+
+    Returns:
+        Iterable[List[str]]: An iterable of lists containing the patches for the pull request event.
+    \"""
+    pull_request = pull_request_event["pullRequest"]
+
+    git_changes = self.get_changed_blobs(pull_request)
+    return [
+        self._get_change(git_change, pull_request["lastMergeSourceCommit"]["commitId"])
+        for git_change in git_changes
+    ]
+""",
+        ),
+    ],
+)
+def test_gpt_code_action(code, contents, new_text):
+    """Tests for code actions which run a command."""
+    with utils.python_file(contents, TEST_FILE_PATH.parent) as temp_file:
+        uri = utils.as_uri(os.fspath(temp_file))
+
+        actual = {}
+        with session.LspSession() as ls_session:
+            ls_session.initialize()
+
+            done = Event()
+
+            def _handler(params):
+                nonlocal actual
+                actual = params
+                done.set()
+
+            ls_session.set_notification_callback(session.PUBLISH_DIAGNOSTICS, _handler)
+
+            ls_session.notify_did_open(
+                {
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "python",
+                        "version": 1,
+                        "text": contents,
+                    }
+                }
+            )
+
+            # wait for some time to receive all notifications
+            done.wait(TIMEOUT)
+
+            diagnostics = [d for d in actual["diagnostics"] if d["code"] == code]
+
+            assert_that(len(diagnostics), is_(greater_than(0)))
+
+            actual_code_actions = ls_session.text_document_code_action(
+                {
+                    "textDocument": {"uri": uri},
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 1, "character": 0},
+                    },
+                    "context": {"diagnostics": diagnostics},
+                }
+            )
+            text_document = actual_code_actions[0]["edit"]["documentChanges"][0][
+                "textDocument"
+            ]
+            text_range = actual_code_actions[0]["edit"]["documentChanges"][0]["edits"][
+                0
+            ]["range"]
+            expected = [
+                {
+                    "title": f"{LINTER}: Run autofix code action",
+                    "kind": "quickfix",
+                    "diagnostics": [d],
+                    "edit": {
+                        "documentChanges": [
+                            {
+                                "textDocument": text_document,
+                                "edits": [
+                                    {
+                                        "range": text_range,
+                                        "newText": new_text,
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+                for d in diagnostics
+            ]
+
+        assert_that(
+            actual_code_actions[0]["edit"]["documentChanges"],
+            is_(expected[0]["edit"]["documentChanges"]),
+        )
